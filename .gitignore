@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+.idea/*
+bin-int/*
+.vs/*
+bin/*
+*/logs/*
