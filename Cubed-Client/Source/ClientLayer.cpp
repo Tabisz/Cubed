@@ -64,7 +64,6 @@ namespace Cubed
 		}
 		else
 		{
-			bool readOnly = connectionStatus != Walnut::Client::ConnectionStatus::Disconnected;
 			ImGui::Begin("Connect to server");
 				
 

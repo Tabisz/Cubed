@@ -37,7 +37,7 @@ project "Cubed-Server"
    	defines
 	{
 		"YAML_CPP_STATIC_DEFINE"
-	}
+	} 
 
    targetdir ("../bin/" .. outputdir .. "/%{prj.name}")
    objdir ("../bin-int/" .. outputdir .. "/%{prj.name}")
