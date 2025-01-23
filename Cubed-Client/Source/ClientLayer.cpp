@@ -8,8 +8,14 @@
 #include "imgui_internal.h"
 #include "misc/cpp/imgui_stdlib.h"
 
+#include "Walnut/Serialization/BufferStream.h"
+#include "ServerPacket.h"
+
+
 namespace Cubed
 {
+	static Walnut::Buffer s_ScratchBuffer;
+
 
 	static void DrawRect(glm::vec2 position, glm::vec2 size, uint32_t color)
 	{
@@ -21,6 +27,9 @@ namespace Cubed
 	}
 	void ClientLayer::OnAttach()
 	{
+		s_ScratchBuffer.Allocate(10 * 1024 * 1024);
+
+
 		m_Client.SetDataReceivedCallback([this](const Walnut::Buffer buffer) {OnDataReceived(buffer); });
 	}
 	void ClientLayer::OnDetach()
@@ -29,6 +38,10 @@ namespace Cubed
 	}
 	void ClientLayer::OnUpdate(float ts)
 	{
+		Walnut::Client::ConnectionStatus connectionStatus = m_Client.GetConnectionStatus();
+		if (connectionStatus != Walnut::Client::ConnectionStatus::Connected)
+			return;
+
 		glm::vec2 dir{ 0.0f, 0.0f };
 		if (Walnut::Input::IsKeyDown(Walnut::KeyCode::W))
 			dir.y = -1;
@@ -49,11 +62,14 @@ namespace Cubed
 		
 		m_PlayerVelocity = glm::mix(m_PlayerVelocity, glm::vec2(0.0f), 2 * ts);
 
-
-
 		m_PlayerPosition += m_PlayerVelocity * ts;
 
+		Walnut::BufferStreamWriter stream(s_ScratchBuffer);
 
+		stream.WriteRaw(PacketType::ClientUpdate);
+		stream.WriteRaw<glm::vec2>(m_PlayerPosition);
+		stream.WriteRaw<glm::vec2>(m_PlayerVelocity);
+		m_Client.SendBuffer(stream.GetBuffer());
 	}
 	void ClientLayer::OnUIRender()
 	{
@@ -86,6 +102,41 @@ namespace Cubed
 	}
 	void ClientLayer::OnDataReceived(const Walnut::Buffer buffer)
 	{
+		Walnut::BufferStreamReader stream(buffer);
+		PacketType type;
+		stream.ReadRaw(type);
+		switch (type)
+		{
+		case PacketType::None:
+			break;
+		case PacketType::Message:
+			break;
+		case PacketType::ClientConnectionRequest:
+			break;
+		case PacketType::ConnectionStatus:
+			break;
+		case PacketType::ClientList:
+			break;
+		case PacketType::ClientConnect:
+			uint32_t idFromServer;
+			stream.ReadRaw<uint32_t>(idFromServer);
+			m_PlayerID = idFromServer;
+			break;
 
+		case PacketType::ClientUpdate:
+			break;
+		case PacketType::ClientDisconnect:
+			break;
+		case PacketType::ClientUpdateResponse:
+			break;
+		case PacketType::MessageHistory:
+			break;
+		case PacketType::ServerShutdown:
+			break;
+		case PacketType::ClientKick:
+			break;
+		default:
+			break;
+		}
 	}
 }
