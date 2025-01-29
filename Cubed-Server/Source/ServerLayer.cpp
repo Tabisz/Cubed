@@ -27,6 +27,16 @@ namespace Cubed
 
 	void ServerLayer::OnUpdate(float ts)
 	{
+		m_PlayerDataMutex.lock();
+
+		Walnut::BufferStreamWriter stream(s_ScratchBuffer);
+		stream.WriteRaw(PacketType::ClientUpdate);
+		stream.WriteMap(m_PlayerData);
+
+		m_PlayerDataMutex.unlock();
+
+		m_Server.SendBufferToAllClients(stream.GetBuffer());
+
 		using namespace std::chrono_literals;
 		std::this_thread::sleep_for(5ms);
 	}
@@ -70,37 +80,16 @@ namespace Cubed
 		stream.ReadRaw(type);
 		switch (type)
 		{
-		case PacketType::None:
-			break;
-		case PacketType::Message:
-			break;
-		case PacketType::ClientConnectionRequest:
-			break;
-		case PacketType::ConnectionStatus:
-			break;
-		case PacketType::ClientList:
-			break;
-		case PacketType::ClientConnect:
-			break;
 		case PacketType::ClientUpdate:
-			glm::vec2 pos, vel;
-			stream.ReadRaw<glm::vec2>(pos);
-			stream.ReadRaw<glm::vec2>(vel);
 
-			WL_INFO_TAG("Server", "{}, {} - {}, {}", pos.x, pos.y, vel.x, vel.y);
+			m_PlayerDataMutex.lock();
 
-			break;
-		case PacketType::ClientDisconnect:
-			break;
-		case PacketType::ClientUpdateResponse:
-			break;
-		case PacketType::MessageHistory:
-			break;
-		case PacketType::ServerShutdown:
-			break;
-		case PacketType::ClientKick:
-			break;
-		default:
+			PlayerData& playerData = m_PlayerData[clientInfo.ID];
+			stream.ReadRaw<glm::vec2>(playerData.Position);
+			stream.ReadRaw<glm::vec2>(playerData.Velocity);
+
+			m_PlayerDataMutex.unlock();
+
 			break;
 		}
 	}

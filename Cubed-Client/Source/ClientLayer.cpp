@@ -28,9 +28,10 @@ namespace Cubed
 	void ClientLayer::OnAttach()
 	{
 		s_ScratchBuffer.Allocate(10 * 1024 * 1024);
-
-
+		
 		m_Client.SetDataReceivedCallback([this](const Walnut::Buffer buffer) {OnDataReceived(buffer); });
+
+		m_Renderer.Init();
 	}
 	void ClientLayer::OnDetach()
 	{
@@ -70,13 +71,44 @@ namespace Cubed
 		stream.WriteRaw<glm::vec2>(m_PlayerPosition);
 		stream.WriteRaw<glm::vec2>(m_PlayerVelocity);
 		m_Client.SendBuffer(stream.GetBuffer());
+
+		m_PlayerDataMutex.lock();
+		std::map<uint32_t, PlayerData> playerData = m_PlayerData;
+		m_PlayerDataMutex.unlock();
+
+		for (const auto& [id, data] : playerData)
+		{
+			if (id == m_PlayerID)
+				continue;
+
+
+		}
 	}
+
+	void ClientLayer::OnRender()
+	{
+		m_Renderer.Render();
+	}
+
 	void ClientLayer::OnUIRender()
 	{
 		Walnut::Client::ConnectionStatus connectionStatus = m_Client.GetConnectionStatus();
 		if (connectionStatus == Walnut::Client::ConnectionStatus::Connected)
 		{
 			DrawRect(m_PlayerPosition, { 200, 200 }, 0xffff00ff);
+
+			m_PlayerDataMutex.lock();
+			std::map<uint32_t, PlayerData> playerData = m_PlayerData;
+			m_PlayerDataMutex.unlock();
+
+			for (const auto& [id, data] : playerData)
+			{
+				if (id == m_PlayerID)
+					continue;
+
+				DrawRect(data.Position, { 200, 200 }, 0xff00ff00);
+
+			}
 		}
 		else
 		{
@@ -124,6 +156,9 @@ namespace Cubed
 			break;
 
 		case PacketType::ClientUpdate:
+			m_PlayerDataMutex.lock();
+			stream.ReadMap(m_PlayerData);
+			m_PlayerDataMutex.unlock();
 			break;
 		case PacketType::ClientDisconnect:
 			break;
