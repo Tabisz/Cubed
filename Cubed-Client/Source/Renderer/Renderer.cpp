@@ -2,14 +2,28 @@
 
 #include <array>
 #include <fstream>
+#include <glm/vec3.hpp>
 
 #include "Walnut/Application.h"
 
 namespace Cubed
 {
+
+	static uint32_t ImGui_ImplVulkan_MemoryType(VkMemoryPropertyFlags properties, uint32_t type_bits)
+	{
+		VkPhysicalDevice physicalDevice = Cubed::GetVulkanInfo()->PhysicalDevice;
+		VkPhysicalDeviceMemoryProperties prop;
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &prop);
+		for (uint32_t i = 0; i < prop.memoryTypeCount; i++)
+			if ((prop.memoryTypes[i].propertyFlags & properties) == properties && type_bits & (1 << i))
+				return i;
+		return 0xFFFFFFFF; // Unable to find memoryType
+	}
+	
     void Renderer::Init()
     {
     	InitPipeline();
+		InitBuffers();
     }
 
     void Renderer::Shutdown()
@@ -43,7 +57,7 @@ namespace Cubed
     	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     }
-
+1:31:00
 	
     void Renderer::InitPipeline()
     {
@@ -132,7 +146,47 @@ namespace Cubed
 	vkDestroyShaderModule(device, shader_stages[1].module, nullptr);
     }
 
-	VkShaderModule Renderer::LoadShader(const std::filesystem::path& path)
+	void Renderer::InitBuffers()
+	{
+		VkDevice device = GetVulkanInfo()->Device;
+		
+		glm::vec3 vertexData[3] ={
+		glm::vec3(-0.5f, -0.5f, 0.0f),
+		glm::vec3( 0.0f,  0.5f, 0.0f),
+		glm::vec3( 0.5f, -0.5f, 0.0f)
+		};
+		
+		uint32_t indices[3] = {0,1,2};
+		
+		m_VertexBuffer.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		CreateOrResizeBuffer(m_VertexBuffer,sizeof(vertexData));
+		
+		m_IndexBuffer.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+		CreateOrResizeBuffer(m_IndexBuffer,sizeof(indices));
+
+		glm::vec3* vbMemory;
+		VK_CHECK(vkMapMemory(device,m_VertexBuffer.Memory, 0,sizeof(vertexData),0,(void**)&vbMemory));
+		memcpy(vbMemory,vertexData,sizeof(vertexData));
+		
+		uint32_t* ibMemory;
+		VK_CHECK(vkMapMemory(device,m_IndexBuffer.Memory, 0,sizeof(indices),0,(void**)&ibMemory));
+		memcpy(ibMemory,indices,sizeof(indices));
+		
+		VkMappedMemoryRange range[2] = {};
+		range[0].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range[0].memory = m_VertexBuffer.Memory;
+		range[0].size = VK_WHOLE_SIZE;
+		range[1].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range[1].memory = m_IndexBuffer.Memory;
+		range[1].size = VK_WHOLE_SIZE;
+
+		VK_CHECK(vkFlushMappedMemoryRanges(device,2,range));
+		vkUnmapMemory(device,m_VertexBuffer.Memory);
+		vkUnmapMemory(device,m_IndexBuffer.Memory);
+		
+	}
+
+    VkShaderModule Renderer::LoadShader(const std::filesystem::path& path)
     {
     	std::ifstream stream(path, std::ios::binary);
 
@@ -157,6 +211,34 @@ namespace Cubed
     	
     	VK_CHECK(vkCreateShaderModule(device, &shaderModuleCI,nullptr, &result));
     	return result;
+    }
+
+	void Renderer::CreateOrResizeBuffer(Buffer& buffer, size_t newSize)
+    {
+    	VkDevice device = GetVulkanInfo()->Device;
+    	
+    	if (buffer.Handle != VK_NULL_HANDLE)
+    		vkDestroyBuffer(device, buffer.Handle, nullptr);
+    	if (buffer.Handle != VK_NULL_HANDLE)
+    		vkFreeMemory(device, buffer.Memory, nullptr);
+
+    	VkBufferCreateInfo bufferCI = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    	bufferCI.size = newSize;
+    	bufferCI.usage = buffer.usage;
+    	bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    	VK_CHECK(vkCreateBuffer(device, &bufferCI, nullptr, &buffer.Handle));
+
+    	VkMemoryRequirements req;
+    	vkGetBufferMemoryRequirements(device, buffer.Handle, &req);
+    	//bd->BufferMemoryAlignment = (bd->BufferMemoryAlignment > req.alignment) ? bd->BufferMemoryAlignment : req.alignment;
+    	VkMemoryAllocateInfo alloc_info = {};
+    	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    	alloc_info.allocationSize = req.size;
+    	alloc_info.memoryTypeIndex = ImGui_ImplVulkan_MemoryType(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, req.memoryTypeBits);
+    	VK_CHECK(vkAllocateMemory(device, &alloc_info,nullptr, &buffer.Memory));
+
+    	VK_CHECK(vkBindBufferMemory(device, buffer.Handle, buffer.Memory, 0));
+    	buffer.Size = req.size;
     }
 
 }
